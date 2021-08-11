@@ -1,14 +1,19 @@
 import argparse
 import os
 import sys
+import xgboost as xgb
 import data
+import optimize
 
 
-class XGBoostModel:
-    def __init__(self):
-        self.model = None
-        self.hyper_parameters = {}
-        self.base_models = []
+def pipeline(tune_hyper, feature_select):
+    """A custom pipeline for running, testing, and evaluating the XGBoost model """
+    # optimize the hyperparameters here
+    # pull hyperparameters from a .txt file?
+    # can also update hyperparameters and write those into a .txt file?
+    hyperparameters = {}
+
+    model = xgb.XGBRegressor()
 
 
 def check_file_path(file_path: str) -> str:
@@ -27,25 +32,26 @@ if __name__ == '__main__':
                         default='Input/database.csv')
     parser.add_argument('-i', '--input', help="file path to your csv file to make predictions on", type=check_file_path,
                         default=None)
-    parser.add_argument('-o', '--optimize', help="set 'True' to optimize hyper-parameters",
-                        type=bool, default=False)
+    parser.add_argument('-tu', '--tune', help="set 'True' to tune and test hyper-parameters", type=bool, default=False)
+    parser.add_argument('f', '--feature', help="Set to true to perform feature selection via RFECV")
 
     # parse CLI commands
     args = vars(parser.parse_args(sys.argv))
-    iterations = args['iterations']
-    optimize = args['optimize']
+    iterations = args['iterations'], tune = args['tune'], feature = args['feature']
 
     # Set our dataset
-    dataset = data.dataset()
+    dataset = data.Datasets()
     dataset.raw_data = args['train']
 
     # Set user's dataset if provided
     if args['input'] is not None:
         dataset.user_data = args['input']
 
-    # preprocess and clean the dataset(s)
-    dataset.process_data()
+    # clean + preprocess dataset(s)
+    dataset.preprocess_data()
 
     # go through ML pipeline
+    for i in iterations:
+        pipeline(tune_hyper=tune, feature_select=feature)
 
 
