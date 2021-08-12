@@ -7,6 +7,27 @@ from sklearn.model_selection import train_test_split
 
 
 class Datasets:
+    """
+       Handles data fetching, cleaning, and preprocessing. To assign CSV files to attributes like raw_data or user_data,
+       please use the custom CLI arguments to input desired CSV file paths. One example of a CLI command would be:
+       'python3 pipeline.py 50 -i Input/<CSV file path>' to make predictions on some other dataset. For more help, use
+        the --help flag when inputting CLI commands. The Datasets object will take care of proper assignments and data
+        cleaning operations. If you decide to use our dataset (or another) to make predictions on another dataset,
+        please make sure your CSV/Excel file matches the format in <Input/database.csv>
+
+       Args: None
+       Attributes:
+           :pandas DataFrame self._raw_data: holds the raw data from our CSV file
+           :pandas DataFrame self._cleaned_data: holds cleaned and one-hot encoded data from our CSV file
+           :pandas DataFrame self._user_data: holds the raw data from a user's inputted CSV file
+           :pandas DataFrame self._cleaned_user_data: holds cleaned and one-hot encoded data from a user's CSV file
+           :pandas Series (?) self._accession_numbers: holds the accession numbers of the proteins in the dataset
+           :pandas DataFrame self._x_train: contains the input variables for training
+           :pandas DataFrame self._y_train: contains output variable for training
+           :pandas Dataframe self._x_test: contains input variables for testing
+           :pandas DataFrame self._y_test:contains output variable for testing
+           :pandas DataFrame self._target: holds the ground truth values for the output variable
+       """
     def __init__(self):
         self._raw_data = None
         self._cleaned_data = None
@@ -19,7 +40,7 @@ class Datasets:
         self._y_test = None
         self._target = None
 
-    # List of helpful properties to set or get XGBoostModel attributes
+    # List of helpful properties to set or get Dataset attributes
     @property
     def raw_data(self):
         if self._raw_data is None:
@@ -125,7 +146,8 @@ class Datasets:
 
     def preprocess_data(self):
         """
-        Process our dataset, and if specified via the CLI, the user's dataset
+        Process our dataset, and if specified via the CLI, the user's dataset. Involves cleaning the raw data, setting
+        the x_train, y_train, x_test, and y_test datasets, and dropping any unneeded columns from the datasets
 
         :param: None
         :return: None
@@ -154,7 +176,7 @@ class Datasets:
     def split_data(self):
         """
         If the user has not inputted another dataset, split our data into X and Y testing and training sets using
-        (insert method)
+        sklearn's train_test_split (for now at least)
 
         :param: None
         :return: None
