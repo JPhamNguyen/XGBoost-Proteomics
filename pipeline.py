@@ -1,31 +1,35 @@
 import argparse
 import os
 import sys
+import json
 import xgboost as xgb
+import optuna
 import data
 import optimize
-import json
 
 
 def pipeline(data, iteration, tune_hyper, feature_select):
     # clean + set x_training, x_test, y_training, and y_testing datasets
     data.preprocess_data()
 
-    # optimize XGBoost hyperparameters and save it as JSON
+    # tune hyperparameters with Bayesian Optimization via Optuna
+    # need to be able to pass in the dataset object into the objective function
     if tune_hyper:
-        optimize.tune_hyperparameters(output_file='hyperparameters.txt')
+        study = optuna.create_study(direction='minimize')
+        study.optimize(optimize.tune_hyperparameters(data=data.x_train, target=data.target), n_trials=100)
 
     try:
         with open('hyperparameters.txt') as json_file:
             hyperparameters = json.load(json_file)
             print(hyperparameters.type())
             print(hyperparameters)
-    except ValueError:
-        print("txt file containing the hyperparameters is empty, initialize hyperparameters by calling optimize.tune_hyperparameters")
-        hyperparameters = {}
+    except FileNotFoundError:
+        print("\ntxt file containing the hyperparameters is empty, initialize hyperparameters by calling "
+              "optimize.tune_hyperparameters()\n")
+        sys.exit(1)
 
     # declare the model (and insert previous hyperparameters --> does it take params as a dictionary?)
-    est = xgb.XGBRegressor()
+    est = xgb.XGBRegressor(**hyperparameters)
 
     # obtain a binary mask from RFECV
     if feature_select:
@@ -33,7 +37,7 @@ def pipeline(data, iteration, tune_hyper, feature_select):
 
         # go through ML pipeline
     for i in iteration:
-        print(f"Run Number: {i}")
+        print(f'Run Number: {i}')
         run_and_evaluate(cleaned_dataset=dataset, xgb=est)
 
 
@@ -66,7 +70,7 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--input', help="file path to your csv file to make predictions on", type=check_file_path,
                         default=None)
     parser.add_argument('-tu', '--tune', help="set 'True' to tune and test hyper-parameters", type=bool, default=False)
-    parser.add_argument('f', '--feature', help="Set to true to perform feature selection via RFECV")
+    parser.add_argument('-f', '--feature', help="Set to true to perform feature selection via RFECV")
 
     # parse CLI commands
     args = vars(parser.parse_args(sys.argv))
