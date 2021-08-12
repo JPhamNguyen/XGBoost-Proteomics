@@ -35,6 +35,17 @@ class Datasets:
             raise ValueError("Please provide existing filepath to desired dataset")
 
     @property
+    def cleaned_data(self):
+        if self._cleaned_data is None:
+            raise ValueError("Initialize cleaned_data by calling clean_raw_data()")
+        else:
+            return self._cleaned_data
+
+    @cleaned_data.setter
+    def cleaned_data(self, cleaned_raw_data):
+        self._cleaned_data = cleaned_raw_data
+
+    @property
     def user_data(self):
         if self._user_data is None:
             raise ValueError("Initialize user data by setting the --i tag in CLI arguments")
@@ -60,17 +71,6 @@ class Datasets:
         self._cleaned_user_data = cleaned_raw_data
 
     @property
-    def cleaned_data(self):
-        if self._cleaned_data is None:
-            raise ValueError("Initialize cleaned_data by calling clean_raw_data()")
-        else:
-            return self._cleaned_data
-
-    @cleaned_data.setter
-    def cleaned_data(self, cleaned_raw_data):
-        self._cleaned_data = cleaned_raw_data
-
-    @property
     def accession_numbers(self):
         if self._accession_numbers is None:
             raise ValueError("Initialize accession_numbers by calling clean_raw_data()")
@@ -83,6 +83,34 @@ class Datasets:
             raise ValueError("Initialize accession_numbers by calling clean_raw_data()")
         else:
             return self._target
+
+    @property
+    def x_train(self):
+        if self._x_train is None:
+            raise ValueError("Initialize x_train by calling preprocess_data()")
+        else:
+            return self._x_train
+
+    @property
+    def y_train(self):
+        if self._y_train is None:
+            raise ValueError("Initialize x_train by calling preprocess_data()")
+        else:
+            return self._y_train
+
+    @property
+    def x_test(self):
+        if self._x_test is None:
+            raise ValueError("Initialize x_test by calling preprocess_data()")
+        else:
+            return self._x_test
+
+    @property
+    def y_test(self):
+        if self._y_test is None:
+            raise ValueError("Initialize y_test by calling preprocess_data()")
+        else:
+            return self._y_test
 
     @staticmethod
     def read_data(enm_database):
@@ -122,11 +150,6 @@ class Datasets:
             self._x_test = self._cleaned_user_data.drop(labels=columns_to_drop, axis=1)
             self._x_test = self._x_test.drop('Accession Number', axis=1)
             self._x_train = self._x_train.drop('Accession Number', axis=1)
-            print(self._x_test.columns)
-        else:
-            # split our dataset to make predictions
-            self.split_data()
-        # nothing to return, simply proceed with the pipeline
 
     def split_data(self):
         """
@@ -140,6 +163,9 @@ class Datasets:
         self._x_train, self._x_test, self._y_train, self._y_test = train_test_split(self._x_train, self._target,
                                                                                     train_size=.8, random_state=42)
         self._accession_numbers = self._x_train['Accession Number']
+        self._x_train = self._x_train.drop('Accession Number', 1)
+        self._x_test = self._x_test.drop('Accession Number', 1)
+
         print(self._x_train.shape, self._x_test.shape, self._y_train.shape, self._y_test.shape)
         print(self._accession_numbers)
         sys.exit(0)
@@ -174,7 +200,7 @@ def clean_raw_data(raw_data):
     imputed_continuous = imputer.fit_transform(continuous)
     continuous = pd.DataFrame(imputed_continuous, columns=continuous.columns, index=continuous.index)
 
-    # Max fill function for categorical columns + join cleaned DataFrames together (order of features is irrelevant)
+    # Max fill for categorical columns + join cleaned DataFrames together (order of features is irrelevant)
     categorical_data = categorical_data.apply(lambda x: x.fillna(x.value_counts().index[0]))
     cleaned_dataset = continuous.join(categorical_data).join(nonnumerical_data)
 
