@@ -4,16 +4,49 @@ import sys
 import xgboost as xgb
 import data
 import optimize
+import json
 
 
-def pipeline(tune_hyper, feature_select):
+def pipeline(data, iteration, tune_hyper, feature_select):
+    # clean + set x_training, x_test, y_training, and y_testing datasets
+    data.preprocess_data()
+
+    # optimize XGBoost hyperparameters and save it as JSON
+    if tune_hyper:
+        optimize.tune_hyperparameters(output_file='hyperparameters.txt')
+
+    try:
+        with open('hyperparameters.txt') as json_file:
+            hyperparameters = json.load(json_file)
+            print(hyperparameters.type())
+            print(hyperparameters)
+    except ValueError:
+        print("txt file containing the hyperparameters is empty, initialize hyperparameters by calling optimize.tune_hyperparameters")
+        hyperparameters = {}
+
+    # declare the model (and insert previous hyperparameters --> does it take params as a dictionary?)
+    est = xgb.XGBRegressor()
+
+    # obtain a binary mask from RFECV
+    if feature_select:
+        optimize.feature_selection(model=est, x_train=data.x_train, y_train=data.y_train, output_file='Input/_mask.txt')
+
+        # go through ML pipeline
+    for i in iteration:
+        print(f"Run Number: {i}")
+        run_and_evaluate(cleaned_dataset=dataset, xgb=est)
+
+
+def run_and_evaluate(cleaned_dataset, xgb):
     """A custom pipeline for running, testing, and evaluating the XGBoost model """
-    # optimize the hyperparameters here
-    # pull hyperparameters from a .txt file?
-    # can also update hyperparameters and write those into a .txt file?
-    hyperparameters = {}
 
-    model = xgb.XGBRegressor()
+    # split our dataset to make predictions
+    if cleaned_dataset.user_data is None:
+        cleaned_dataset.split_data()
+
+    # apply RFECV mask to extract optimal features
+
+    # fit, run, and iterate on previous versions of the XGBoost
 
 
 def check_file_path(file_path: str) -> str:
@@ -37,7 +70,9 @@ if __name__ == '__main__':
 
     # parse CLI commands
     args = vars(parser.parse_args(sys.argv))
-    iterations = args['iterations'], tune = args['tune'], feature = args['feature']
+    tune_hyperparameters = args['tune']
+    feature_selection = args['feature']
+    iterations = args['iterations']
 
     # Set our dataset
     dataset = data.Datasets()
@@ -47,11 +82,6 @@ if __name__ == '__main__':
     if args['input'] is not None:
         dataset.user_data = args['input']
 
-    # clean + preprocess dataset(s)
-    dataset.preprocess_data()
-
-    # go through ML pipeline
-    for i in iterations:
-        pipeline(tune_hyper=tune, feature_select=feature)
-
+    # run the pipeline to clean data, tune hyperparameters, perform feature selection, and run the model
+    pipeline(data=dataset, iteration=iterations, tune_hyper=tune_hyperparameters, feature_select=feature_selection)
 
