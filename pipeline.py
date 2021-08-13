@@ -4,24 +4,34 @@ import sys
 import json
 import xgboost as xgb
 import optuna
+import plotly
 import data
 import optimize
 
 
-def pipeline(data, iteration, tune_hyper, feature_select):
-    # clean + set x_training, x_test, y_training, and y_testing datasets
-    data.preprocess_data()
+def pipeline(dataset, iteration, tune_hyper, feature_select):
+    # clean dataset(s), set training datasets, and possibly testing datasets if another user's dataset is inputted
+    dataset.preprocess_data()
 
     # tune hyperparameters with Bayesian Optimization via Optuna
-    # need to be able to pass in the dataset object into the objective function
     if tune_hyper:
-        study = optuna.create_study(direction='minimize')
-        study.optimize(optimize.tune_hyperparameters(data=data.x_train, target=data.target), n_trials=100)
+        study = optuna.create_study(direction='minimize', study_name='hyperparameter-tuning')
+        study.optimize(lambda trial: optimize.tune_hyperparameters(trial=trial, x_data=dataset.x_train, target=dataset.target), n_trials=100)
+        print("\nNumber of finished trials:", len(study.trials))
+        print("\nBest Trial:", study.best_trial.params)
+        # optuna.visualization.plot_optimization_history(study=study)
+        # optuna.visualization.plot_parallel_coordinate(study=study)
 
+        # store hyperparameters as json into a text file to use in the real XGBoost
+        if os.path.exists('config/') is False:
+            os.mkdir('config')
+        with open('config/hyperparameters.txt', 'w') as f:
+            json.dump(study.best_params, f)
+
+    # grab previously obtained hyperparameters to use in model
     try:
-        with open('hyperparameters.txt') as json_file:
-            hyperparameters = json.load(json_file)
-            print(hyperparameters.type())
+        with open('config/hyperparameters.txt') as file:
+            hyperparameters = json.load(file)
             print(hyperparameters)
     except FileNotFoundError:
         print("\ntxt file containing the hyperparameters is empty, initialize hyperparameters by calling "
@@ -33,9 +43,13 @@ def pipeline(data, iteration, tune_hyper, feature_select):
 
     # obtain a binary mask from RFECV
     if feature_select:
-        optimize.feature_selection(model=est, x_train=data.x_train, y_train=data.y_train, output_file='Input/_mask.txt')
+        # scale the data features to run the RFECV algorithm
+        dataset.x_train = data.scale(dataset.x_train)
+        optimize.feature_selection(model=est, x_train=dataset.x_train, y_train=dataset.y_train, output_file='Input/_mask.txt')
 
-        # go through ML pipeline
+    sys.exit(0)
+
+    # go through ML pipeline
     for i in iteration:
         print(f'Run Number: {i}')
         run_and_evaluate(cleaned_dataset=dataset, xgb=est)
@@ -49,6 +63,9 @@ def run_and_evaluate(cleaned_dataset, xgb):
         cleaned_dataset.split_data()
 
     # apply RFECV mask to extract optimal features
+    # apply the binary mask obtained with RFECV
+    data.x_train, data.x_test = data.apply_RFECV_mask('Input/_mask.txt', data.x_train, data.x_test)
+    print(data.x_train.columns)
 
     # fit, run, and iterate on previous versions of the XGBoost
 
@@ -87,5 +104,5 @@ if __name__ == '__main__':
         dataset.user_data = args['input']
 
     # run the pipeline to clean data, tune hyperparameters, perform feature selection, and run the model
-    pipeline(data=dataset, iteration=iterations, tune_hyper=tune_hyperparameters, feature_select=feature_selection)
+    pipeline(dataset=dataset, iteration=iterations, tune_hyper=tune_hyperparameters, feature_select=feature_selection)
 
