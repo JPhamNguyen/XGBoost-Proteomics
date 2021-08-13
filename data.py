@@ -4,6 +4,7 @@ import sys
 import os
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
+from sklearn import preprocessing
 
 
 class Datasets:
@@ -112,6 +113,15 @@ class Datasets:
         else:
             return self._x_train
 
+    @x_train.setter
+    def x_train(self, path):
+        if isinstance(path, str) and os.path.isfile(path):
+            # If trying to set to value from excel
+            self._x_train = self.read_data(path)
+        else:
+            # If trying to set to already imported array
+            self._x_train = path
+
     @property
     def y_train(self):
         if self._y_train is None:
@@ -153,13 +163,14 @@ class Datasets:
         :return: None
         """
         # columns to drop from the dataset(s)
-        columns_to_drop = ['Protein Length', 'Sequence', 'Bound Fraction']
+        columns_to_drop = ['Protein Length', 'Sequence', 'Bound Fraction', 'Accession Number']
 
         # clean our dataset and user's dataset if provided
         self._cleaned_data = clean_raw_data(self.raw_data)
 
-        # Set our training sets from our dataset
+        # Set our training sets from our dataset + grab accession numbers to make it easier to run algorithms like RFECV
         self._y_train = self._target = self._cleaned_data['Bound Fraction']
+        self._accession_numbers = self._cleaned_data['Accession Number']
         self._x_train = self._cleaned_data.drop(labels=columns_to_drop, axis=1)
 
         # Use our dataset as a training set to make predictions on yours
@@ -167,11 +178,7 @@ class Datasets:
             self._cleaned_user_data = clean_raw_data(self._user_data)
             self._accession_numbers = self._cleaned_user_data['Accession Number']
             self._y_test = self._cleaned_user_data['Bound Fraction']
-
-            # drop some unneeded columns
             self._x_test = self._cleaned_user_data.drop(labels=columns_to_drop, axis=1)
-            self._x_test = self._x_test.drop('Accession Number', axis=1)
-            self._x_train = self._x_train.drop('Accession Number', axis=1)
 
     def split_data(self):
         """
@@ -181,10 +188,14 @@ class Datasets:
         :param: None
         :return: None
         """
+        # attach Accession Numbers to cleaned data in order to maintain proper filtering later one
+        self._x_train['Accession Number'] = self._accession_numbers
+
         # random state set for reproducibility
         self._x_train, self._x_test, self._y_train, self._y_test = train_test_split(self._x_train, self._target,
-                                                                                    train_size=.8, random_state=42)
-        self._accession_numbers = self._x_train['Accession Number']
+                                                                                    train_size=0.8, random_state=42)
+        # grab shuffled accession numbers
+        self._accession_numbers = self._x_test['Accession Number']
         self._x_train = self._x_train.drop('Accession Number', 1)
         self._x_test = self._x_test.drop('Accession Number', 1)
 
@@ -246,4 +257,69 @@ def one_hot_encode(dataframe, category):
     dataframe = pd.concat([dataframe, dummy], axis=1)
     dataframe.drop(category, axis=1, inplace=True)
     return dataframe
+
+
+def scale(dataframe):
+    """While tree-based models like XGBoost are relatively insensitive to scaling, feature selection algorithms like
+    RFECV are sensitive to large values and thus require scaling to properly work. Works by normalizing and reshaping
+    the data by specified columns while preserving labels information.
+    Args:
+        :param: data (pandas df): The data to normalize
+        :param: labels (pandas series): The column labels
+    Returns:
+        :param data (pandas df): normalized dataframe with preserved column labels
+    """
+    norm_df = preprocessing.MinMaxScaler().fit_transform(dataframe)
+    data = pd.DataFrame(norm_df, columns=list(dataframe))
+    data.reset_index(drop=True, inplace=True)
+    return data
+
+
+def apply_RFECV_mask(mask, *args):
+    """Applies a binary mask to a dataframe to remove columns. Binary mask is created from recursive feature elimination
+     and cross validation and optimizes the generalization of the model
+    Args:
+        :param: mask (string): text file containing the binary mask
+        :param: *args (pandas dataframe): Dataframes containing columns to mask
+    Returns:
+        :updated_args (pandas df): new dataframes with columns removed
+    """
+    assert os.path.isfile(mask), "please pass a string specifying mask location"
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    mask = os.path.join(dir_path, mask)
+    # get mask data
+    updated_args = []
+    with open(mask, 'r') as f:
+        reader = csv.reader(f)
+        column_mask = list(reader)[0]
+    # apply mask to columns
+    column_indexes = []
+    for dataframe in args:
+        if len(column_mask) != len(list(dataframe)):
+            column_mask = remove_extra_entries(column_mask)
+            assert len(column_mask) == len(list(dataframe)), 'mask length {} does not match dataframe length {}' \
+                .format(len(column_mask), len(list(dataframe)))
+
+        for i, col in enumerate(column_mask):
+            if col.strip() == 'False':
+                column_indexes.append(i)
+
+        updated_args.append(dataframe.drop(dataframe.columns[column_indexes], axis=1))
+    return updated_args
+
+
+def remove_extra_entries(mask):
+    """Remove extra entries like '' or '\n' in the binary mask iff the length of mask does not match the corresponding
+    dataframe length
+    Args:
+        :param: mask (array): the binary mask as a list of values
+    Returns: mask (array): the binary mask with extraneous values removed from end of list
+    """
+    for i, col in reversed(list(enumerate(mask))):
+        stripped_col = col.strip()
+        if stripped_col == "True" or stripped_col == "False":
+            break
+        else:
+            del mask[i]
+    return mask
 
