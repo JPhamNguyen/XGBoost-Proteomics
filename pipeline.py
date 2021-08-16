@@ -6,6 +6,8 @@ import xgboost as xgb
 import optuna
 import data
 import optimize
+import evaluate
+from sklearn.metrics import mean_squared_error
 
 
 def pipeline(dataset, iteration, tune_hyper, feature_select):
@@ -44,12 +46,12 @@ def pipeline(dataset, iteration, tune_hyper, feature_select):
         optimize.feature_selection()
 
     # go through ML pipeline
-    for i in iteration:
+    for i in range(iteration):
         print(f'Run Number: {i}')
-        run_and_evaluate(cleaned_dataset=dataset, xgb=est)
+        run_and_evaluate(cleaned_dataset=dataset, model=est)
 
 
-def run_and_evaluate(cleaned_dataset, xgb):
+def run_and_evaluate(cleaned_dataset, model):
     """A custom pipeline for running, testing, and evaluating the XGBoost model """
 
     # split our dataset to make predictions
@@ -58,10 +60,25 @@ def run_and_evaluate(cleaned_dataset, xgb):
 
     # apply RFECV mask to extract optimal features
     # apply the binary mask obtained with RFECV
-    data.x_train, data.x_test = data.apply_RFECV_mask('Input/_mask.txt', data.x_train, data.x_test)
-    print(data.x_train.columns)
+    # data.x_train, data.x_test = data.apply_RFECV_mask('Input/_mask.txt', data.x_train, data.x_test)
+    # print(data.x_train.columns)
 
-    # fit, run, and iterate on previous versions of the XGBoost
+    # train and then run the XGBoost Regressor
+    model.fit(X=cleaned_dataset.x_train,
+              y=cleaned_dataset.y_train,
+              eval_set=[(cleaned_dataset.x_test, cleaned_dataset.y_test)],
+              eval_metric=['logloss', 'rmse', 'mae'],
+              early_stopping_rounds=10,
+              verbose=True,)
+
+    y_pred = model.predict(cleaned_dataset.x_test)
+    # print(y_pred)
+    # print(cleaned_dataset.y_test)
+    rmse = mean_squared_error(cleaned_dataset.y_test, y_pred, squared=False)
+    print(model.get_booster().get_dump())
+    print(rmse)
+    evaluate.visualize_tree_splits(model=model)
+
 
 
 def check_file_path(file_path: str) -> str:
