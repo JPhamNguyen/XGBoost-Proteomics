@@ -2,11 +2,12 @@
 import argparse
 import sys
 import pandas as pd
-
+import numpy as np
 import data
 import pipeline
 import os
 import optuna
+from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import RFECV
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
@@ -15,7 +16,8 @@ import xgboost as xgb
 
 def tune_hyperparameters(trial, x_data, target):
     """Use Bayesian Optimization for comprehensive and time-efficient hyperparameter tuning, and save those hyperparameters
-    as JSON into a text file for later use.
+    as JSON into a text file for later use. This is a black box function that optimizes hyperparameters based on the
+    RMSE score of the XGBoostRegressor.
     NOTE: current hyperparameters can be overwritten when running back-to-back hyperparameter tunings
 
     :param: None
@@ -51,40 +53,8 @@ def tune_hyperparameters(trial, x_data, target):
     return rmse
 
 
-def feature_selection(model, x_train, y_train, output_file):
-    """Select most optimal features by using RFECV (recursive feature elimination cross validation).
-    Save the output as a binary mask to apply to the cleaned dataset to extract optimal features later.
-
-    :param: None
-    :returns: None
-    """
-    assert isinstance(output_file, str), "please pass a string specifying mask-file location"
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    mask_file = os.path.join(dir_path, output_file)
-
-    x_train.describe(exclude=[object])
-    sys.exit(1)
-
-    # bug occurs here: ValueError('Input contains NaN, infinity or a value too large for dtype('float32').
-    selector = RFECV(estimator=model, step=1, cv=5, scoring='neg_mean_squared_error', verbose=1)
-    selector = selector.fit(x_train, y_train)
-
-    # display optimal features
-    feature_index = selector.get_support(indices=True)
-    features = []
-
-    for index in feature_index:
-        features.append(x_train.columns[index])
-
-    print("selector support: \n {} \n selector ranking: \n {}".format(selector.support_, selector.ranking_))
-    print("Optimal number of features: \n {} \n Selector grid scores: \n {} \n".format(selector.n_features_, selector.grid_scores_))
-    print("Features Indexes: \n{}\n".format(feature_index))
-    print("Feature Names: \n{}".format(features))
-
-    # write optimum binary mask to text file
-    with open(mask_file, 'w') as f:
-        for item in selector.support_:
-            f.write('{}, '.format(item))
+def feature_selection():
+    pass
 
 
 def test_baseline_models():

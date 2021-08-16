@@ -4,7 +4,6 @@ import sys
 import json
 import xgboost as xgb
 import optuna
-import plotly
 import data
 import optimize
 
@@ -32,22 +31,17 @@ def pipeline(dataset, iteration, tune_hyper, feature_select):
     try:
         with open('config/hyperparameters.txt') as file:
             hyperparameters = json.load(file)
-            print(hyperparameters)
     except FileNotFoundError:
         print("\ntxt file containing the hyperparameters is empty, initialize hyperparameters by calling "
               "optimize.tune_hyperparameters()\n")
         sys.exit(1)
 
-    # declare the model (and insert previous hyperparameters --> does it take params as a dictionary?)
+    # declare the model with optimized hyperparameters
     est = xgb.XGBRegressor(**hyperparameters)
 
-    # obtain a binary mask from RFECV
+    # run feature selection algorithm
     if feature_select:
-        # scale the data features to run the RFECV algorithm
-        dataset.x_train = data.scale(dataset.x_train)
-        optimize.feature_selection(model=est, x_train=dataset.x_train, y_train=dataset.y_train, output_file='Input/_mask.txt')
-
-    sys.exit(0)
+        optimize.feature_selection()
 
     # go through ML pipeline
     for i in iteration:

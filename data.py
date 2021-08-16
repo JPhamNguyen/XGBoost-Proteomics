@@ -1,5 +1,6 @@
 """(Insert description after this module is done)"""
 import pandas as pd
+import numpy as np
 import sys
 import os
 from sklearn.impute import SimpleImputer
@@ -169,7 +170,7 @@ class Datasets:
         self._cleaned_data = clean_raw_data(self.raw_data)
 
         # Set our training sets from our dataset + grab accession numbers to make it easier to run algorithms like RFECV
-        self._y_train = self._target = self._cleaned_data['Bound Fraction']
+        self._y_train = self._target = self._cleaned_data['Bound Fraction'].to_numpy()
         self._accession_numbers = self._cleaned_data['Accession Number']
         self._x_train = self._cleaned_data.drop(labels=columns_to_drop, axis=1)
 
@@ -177,8 +178,11 @@ class Datasets:
         if self._user_data is not None:
             self._cleaned_user_data = clean_raw_data(self._user_data)
             self._accession_numbers = self._cleaned_user_data['Accession Number']
-            self._y_test = self._cleaned_user_data['Bound Fraction']
+            self._y_test = self._cleaned_user_data['Bound Fraction'].to_numpy()
             self._x_test = self._cleaned_user_data.drop(labels=columns_to_drop, axis=1)
+
+        pd.set_option('display.max_columns', None, 'display.max_rows', None)
+        np.set_printoptions(threshold=np.inf)
 
     def split_data(self):
         """
@@ -275,51 +279,17 @@ def scale(dataframe):
     return data
 
 
-def apply_RFECV_mask(mask, *args):
-    """Applies a binary mask to a dataframe to remove columns. Binary mask is created from recursive feature elimination
-     and cross validation and optimizes the generalization of the model
+def rescale(data, labels):
+    """Normalize and reshape the data by columns while preserving labels
+    information
     Args:
-        :param: mask (string): text file containing the binary mask
-        :param: *args (pandas dataframe): Dataframes containing columns to mask
+        :param pandas DataFrame data: The data to normalize
+        :param pandas Series labels: The column labels
     Returns:
-        :updated_args (pandas df): new dataframes with columns removed
+        :param pandas DataFrame data: normalized dataframe with preserved column labels
     """
-    assert os.path.isfile(mask), "please pass a string specifying mask location"
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    mask = os.path.join(dir_path, mask)
-    # get mask data
-    updated_args = []
-    with open(mask, 'r') as f:
-        reader = csv.reader(f)
-        column_mask = list(reader)[0]
-    # apply mask to columns
-    column_indexes = []
-    for dataframe in args:
-        if len(column_mask) != len(list(dataframe)):
-            column_mask = remove_extra_entries(column_mask)
-            assert len(column_mask) == len(list(dataframe)), 'mask length {} does not match dataframe length {}' \
-                .format(len(column_mask), len(list(dataframe)))
-
-        for i, col in enumerate(column_mask):
-            if col.strip() == 'False':
-                column_indexes.append(i)
-
-        updated_args.append(dataframe.drop(dataframe.columns[column_indexes], axis=1))
-    return updated_args
-
-
-def remove_extra_entries(mask):
-    """Remove extra entries like '' or '\n' in the binary mask iff the length of mask does not match the corresponding
-    dataframe length
-    Args:
-        :param: mask (array): the binary mask as a list of values
-    Returns: mask (array): the binary mask with extraneous values removed from end of list
-    """
-    for i, col in reversed(list(enumerate(mask))):
-        stripped_col = col.strip()
-        if stripped_col == "True" or stripped_col == "False":
-            break
-        else:
-            del mask[i]
-    return mask
-
+    norm_df = preprocessing.MinMaxScaler().fit_transform(data)
+    data = pd.DataFrame(norm_df,columns=list(data))
+    data = pd.concat([labels, data], axis=1)
+    data.reset_index(drop=True, inplace=True)
+    return data
