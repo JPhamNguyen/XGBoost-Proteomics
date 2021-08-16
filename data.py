@@ -6,6 +6,7 @@ import os
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
+import random
 
 
 class Datasets:
@@ -71,7 +72,7 @@ class Datasets:
     @property
     def user_data(self):
         if self._user_data is None:
-            raise ValueError("Initialize user data by setting the --i tag in CLI arguments")
+            return None
         else:
             return self._user_data
 
@@ -164,7 +165,7 @@ class Datasets:
         :return: None
         """
         # columns to drop from the dataset(s)
-        columns_to_drop = ['Protein Length', 'Sequence', 'Bound Fraction', 'Accession Number']
+        columns_to_drop = ['Protein Length', 'Sequence', 'Bound Fraction']
 
         # clean our dataset and user's dataset if provided
         self._cleaned_data = clean_raw_data(self.raw_data)
@@ -183,6 +184,7 @@ class Datasets:
 
         pd.set_option('display.max_columns', None, 'display.max_rows', None)
         np.set_printoptions(threshold=np.inf)
+        self._cleaned_data = self._cleaned_data.drop(labels=columns_to_drop, axis=1)
 
     def split_data(self):
         """
@@ -196,16 +198,12 @@ class Datasets:
         self._x_train['Accession Number'] = self._accession_numbers
 
         # random state set for reproducibility
-        self._x_train, self._x_test, self._y_train, self._y_test = train_test_split(self._x_train, self._target,
-                                                                                    train_size=0.8, random_state=42)
+        self._x_train, self._x_test, self._y_train, self._y_test = train_test_split(self._cleaned_data, self._target,
+                                                                                    train_size=0.8, random_state=int((random.random()*100)))
         # grab shuffled accession numbers
         self._accession_numbers = self._x_test['Accession Number']
-        self._x_train = self._x_train.drop('Accession Number', 1)
-        self._x_test = self._x_test.drop('Accession Number', 1)
-
-        print(self._x_train.shape, self._x_test.shape, self._y_train.shape, self._y_test.shape)
-        print(self._accession_numbers)
-        sys.exit(0)
+        self._x_train = self._x_train.drop('Accession Number', axis=1)
+        self._x_test = self._x_test.drop('Accession Number', axis=1)
 
 
 def clean_raw_data(raw_data):
